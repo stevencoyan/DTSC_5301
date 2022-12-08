@@ -1,0 +1,245 @@
+---
+title: "NeuroProject"
+author: "Tobias Jacobson, Sara Wirth, Steven Coyan"
+date: "2022-11-15"
+output: html_document
+---
+
+# **Introduction**
+
+Every year, approximately 234.4 million surgical procedures are performed under general anesthesia worldwide. In 60% of these procedures, neuromuscular-blocking drugs (NMDs) are used to prevent involuntary movement of the patient during surgery. Some drugs, such as Esmeron facilitate endotracheal intubation along with having other surgical benefits.
+
+NMDs paralyze both primary and secondary breathing muscles which can lead to serious pulmonary complications if patients are awakened from surgery before they have reached full breathing capability. There has been a push toward neuromuscular monitoring to measure the effects of NMDs to ensure patients are awakened when ready. Neuromuscular monitoring consists of applying electrical stimulation of a motor nerve during surgery and monitoring the response of the muscle supplied by that nerve. The electrical stimulation pattern resulting from this monitoring is the Train of Four (TOF). A TOF minimum of 0.9 is internationally used as the cut-off benchmark to green-flag an extubation attempt of a patient that has received NMDs. If a patient is extubated while the TOF is below 0.9, it is referred to as residual neuromuscular block. It is estimated that the incidence of residual neuromuscular block is 20-40%.
+
+The major issue with having TOF monitoring devices regularly integrated in operating rooms is that definite physiological explanations for the variability in the devices are poorly understood. This results in clinical providers being hesitant to utilize them, despite the need to reduce residual neuromuscular block as much as possible. This dataset aims to improve neuromuscular monitoring techniques by adopting AI and machine-learning techniques.
+
+## **Question Statement**
+
+This dataset is extremely complex and for people without the expert knowledge in the field, it is impossible to draw very meaningful conclusions about TOF data specifically. We chose to analyze this dataset from a BMI and Drug perspective. We cleaned the data, looked at the number of doses and total drug administered (dosages) of both Esmeron (NMD) and Bridion (a NMD reversal drug), and looked at correlation of the drugs with the BMIs of the patients in the dataset. We wanted to know if patient BMI correlated with either the amount of the drugs administered or the number of doses of each drug administered.
+
+## **Potential Bias**
+
+No bias is identified in any authors other than our hypothesis that a higher BMI will correlate with higher doses of drugs administered.
+
+### **Loading in Data and Preprocessing**
+
+We found our dataset on Kaggle, in which we downloaded and then pushed to GitHub to create a connection for download. We also show the head of the data to get an initial familiarity of its structure. Preprocessing steps we took included cutting the "BMI" attribute into labels, such that we could give the count of patients within a certain BMI.
+
+Note: the URL may not be the same as the current URL connected to the raw file, so you have to go to the raw file and copy the url to make sure it works.
+
+```{r, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(corrplot)
+library(car)
+
+df <- read_csv("https://raw.githubusercontent.com/stevencoyan/DTSC_5301/main/Neuromuscular_monitoring_data.csv")
+df$BMI <- cut(df$BMI, breaks = c(-Inf, 15, 20, 25, 30, 35, Inf), labels = c("<15", "15-20", "20-25", "25-30", "30-35", ">35"))
+head(df)
+```
+
+### BMI Distribution
+
+By grouping by patient, we are able to get a count of the number of patients who fall into each range. From the below plot, we can see that the majority of patients are within a BMI of 20-30, and the histogram appears to follow a normal distribution.
+
+```{r bmi_dist}
+
+bmi <- df %>% 
+  group_by(PK) %>% 
+  count(BMI)
+barplot(table(bmi$BMI), main = "BMI Ranges of Participants",
+        xlab = 'BMI',
+        ylab = 'Count')
+
+```
+
+```{r}
+df <- read_csv("https://raw.githubusercontent.com/stevencoyan/DTSC_5301/main/Neuromuscular_monitoring_data.csv")
+drop <- c("typeStudy")
+dfT <- df[,!(names(df) %in% drop)]
+cPlot <- cor(dfT)
+corrplot.mixed(cor(dfT),upper = "circle",lower = "circle",tl.pos="lt",tl.col = "black", tl.cex=0.6, tl.srt=90)
+```
+
+```{r}
+# High Correlation Pairs -- 
+# exposevo vs inspsevo
+# TOF vs count
+# Esmeron vs TOF
+# T1 vs count
+# Delt exposevo time vs exposevo 
+# Delt exposevo time vs inspsevo 
+# Delt inspsevo time vs exposevo 
+# Delt inspsevo time vs inspsevo 
+# Delt exposevo time vs Delt inspsevo time 
+# SMA_TOF vs TOF
+# EMA TOF SHORT vs TOF
+# EMA TOF SHORT vs SMA TOF
+```
+
+```{r}
+df %>% filter(PK==0) %>%
+  ggplot(aes(ExpSevo, delta_ExpSevo_Time)) + 
+  geom_point()
+
+
+df %>% filter(PK==0) %>%
+  ggplot(aes(InspSevo, delta_InspSevo_Time)) + 
+  geom_point()
+
+df %>% filter(PK==0) %>%
+  ggplot(aes(delta_ExpSevo_Time, delta_InspSevo_Time)) + 
+  geom_point()
+
+df %>% filter(PK==0) %>%
+  ggplot(aes(ExpSevo, InspSevo)) + 
+  geom_point()
+
+df %>% filter(PK==0) %>%
+  ggplot(aes(TOF, Count)) + 
+  geom_point()
+
+
+df %>% filter(PK==0) %>%
+  ggplot(aes(SMA_TOF, TOF)) + 
+  geom_point()
+
+```
+
+```{r}
+
+# Create Smaller Data Frame to pull from 
+df0 <- df %>% select(PK, BMI, Bridion)
+
+iter <- seq(1,136, 1)
+
+Total_Bridion_Given <- c()
+BMI <- c()
+
+for (variable in iter) {
+  pBR <- sum(df[which(df0$PK==variable), 3])
+  Total_Bridion_Given <- append(Total_Bridion_Given, pBR)
+  
+  pBM <- as.double((df0 %>% filter(PK==variable) %>% select(BMI))[1,])
+  BMI <- append(BMI, pBM)
+}
+
+dfAggr <- data.frame(Total_Bridion_Given, BMI)
+
+dfAggr %>% ggplot(aes(BMI, Total_Bridion_Given)) + 
+  geom_point()
+
+
+```
+
+```{r}
+
+iter <- seq(1,136, 1)
+
+# Esmeron 
+esmDosage <- c()
+
+for (variable in iter) {
+  temp <- sum(df[which(df$PK==variable), 6])
+  esmDosage <- append(esmDosage, temp)
+}
+
+
+# Bridion 
+brDosage <- c()
+
+for (variable in iter) {
+  temp <- sum(df[which(df$PK==variable), 9])
+  brDosage <- append(brDosage, temp)
+}
+
+dfDosages <- data.frame(iter, esmDosage, brDosage)
+dfDosages
+
+```
+
+### **Distribution of Drug Doses: Esmeron and Bridion (in mg)**
+
+We also wanted to see the number of patients taking the muscle relaxants to get an idea of a normal use case. In order to study this in ranges, like with BMI, we cut the data into sections. The below plots showcase this, with 25-50 mg of Esmeron being the most common amount used. However, it is intersting to note that Bridion was either used little of (\< 25 mg) or a lot of (\> 100 mg), with little in between.
+
+```{r}
+dfDosages %>% ggplot(aes(iter, esmDosage)) + geom_point()
+
+dfDosages %>% ggplot(aes(iter, brDosage)) + geom_point()
+
+splitEsm = c(sum(dfDosages$esmDosage < 25), sum(dfDosages$esmDosage > 25 & dfDosages$esmDosage < 50),  sum(dfDosages$esmDosage > 50 & dfDosages$esmDosage < 75), sum(dfDosages$esmDosage > 75 & dfDosages$esmDosage < 100),  sum(dfDosages$esmDosage > 100))
+           
+barplot(splitEsm, main="Esmeron Dosage Distribution",
+  names.arg=c("<25", "25-50", "50-75","75-100", ">100"), ylab="mg", xlab="Number of Patients")
+
+
+splitBr = c(sum(dfDosages$brDosage < 25), sum(dfDosages$brDosage > 25 & dfDosages$brDosage < 50),  sum(dfDosages$brDosage > 50 & dfDosages$brDosage < 75), sum(dfDosages$brDosage > 75 & dfDosages$brDosage < 100),  sum(dfDosages$brDosage > 100))
+           
+barplot(splitBr, main="Bridion Dosage Distribution",
+  names.arg=c("<25", "25-50", "50-75","75-100", ">100"), ylab="mg", xlab="Number of Patients")
+```
+
+```{r}
+
+#### TOF Ended Up Being Undesirable #### 
+
+
+#maxTOFlist <- c()
+#minTOFList <- c()
+#index <- seq(0:135)
+
+#for (variable in index) {
+ # temp <- df[which(df$PK==variable), 4]
+  
+  #start <- temp[1]
+  #end <- temp[length(temp)]
+  #print(paste(start, end))
+  
+  
+  #maxTOF <- max(temp)
+  #maxTOFlist <- append(maxTOFlist, maxTOF)
+  
+  #minTOF <- min(temp)
+  #minTOFList <- append(minTOFList, minTOF)
+# }
+
+#min(maxTOFlist)
+
+#### TOFR #### 
+
+#plot(index, maxTOFlist, xlab="Patient ID", ylab="Max TOF Achieved ")
+
+#plot(index, minTOFList, xlab="Patient ID", ylab="Min TOF Achieved ")
+
+
+```
+
+### Correlation between Drug and BMI
+
+In order to see the correlation between the BMI of the patient and the maximum amount of each drug recieved, we used the 'cor' function. Shown below, we can see that for both drugs, there was little correlation between the two.
+
+```{r bmi_drug_corr}
+df <- read_csv("https://raw.githubusercontent.com/stevencoyan/DTSC_5301/main/Neuromuscular_monitoring_data.csv")
+
+bmi_e <- df %>%
+  group_by(PK) %>%
+  summarize(BMI = first(BMI),
+         Esmeron_Max = max(Esmeron))
+
+# correlation between BMI and Esmeron
+cor(bmi_e$BMI, bmi_e$Esmeron_Max)
+
+bmi_b <- df %>%
+  group_by(PK) %>%
+  summarize(BMI = first(BMI),
+         Bridion_Max = max(Bridion))
+
+# correlation between BMI and Bridion
+cor(bmi_b$BMI, bmi_b$Bridion_Max)
+```
+
+# \*\* Conclusion \*\*
+
+As mentioned, NMD's are powerful drugs that are good at preventing movement during surgery. Our study mainly consisted of seeing if the effect of these drugs correlated with the BMI of the patient, such that a higher dosage would be needed. Through our findings, we concluded that this is not the case, and that there are other factors that may correlate/contribute to patients receiving a higher dosage than others. Another interesting thing we could study in the future could be the study of why a patient would receive each amount of a drug, and analyze the two from the dataset together.
